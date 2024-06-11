@@ -1,0 +1,9 @@
+[package]
+name = "nodedup"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+walkdir = "2.5.0"
+mockall = "0.12.1"
+serde_json = "1.0.117"
