@@ -1,5 +1,7 @@
-use std::env;
-use std::path::{Component, Path};
+use std::{
+    env,
+    path::{Component, Path},
+};
 
 use walkdir::WalkDir;
 
