@@ -47,7 +47,7 @@ fn traverse_deps(deps: Option<&Value>, map: &mut HashMap<String, Vec<PackageValu
                                     path: path.to_string(),
                                 },
                             );
-                            return;
+                            continue;
                         }
 
                         entry.push(PackageValue {
