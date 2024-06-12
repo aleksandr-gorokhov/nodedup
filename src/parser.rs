@@ -38,7 +38,22 @@ fn traverse_deps(deps: Option<&Value>, map: &mut HashMap<String, Vec<PackageValu
                         .collect::<String>();
 
                     if !entry.iter_mut().any(|v| v.version == cleaned_value) {
-                        if !entry.is_empty() && entry[0].version < cleaned_value {
+                        if entry.is_empty() {
+                            entry.push(PackageValue {
+                                name: key.to_string(),
+                                version: cleaned_value.to_string(),
+                                path: path.to_string(),
+                            });
+                            continue;
+                        }
+                        let (major, minor, patch) = get_versions(&entry[0].version);
+                        let (major_new, minor_new, patch_new) = get_versions(&cleaned_value);
+
+                        let should_insert = major_new > major
+                            || (major_new == major && minor_new > minor)
+                            || (major_new == major && minor_new == minor && patch_new > patch);
+
+                        if should_insert {
                             entry.insert(
                                 0,
                                 PackageValue {
@@ -54,12 +69,21 @@ fn traverse_deps(deps: Option<&Value>, map: &mut HashMap<String, Vec<PackageValu
                             name: key.to_string(),
                             version: cleaned_value.to_string(),
                             path: path.to_string(),
-                        })
+                        });
                     }
                 }
             }
         }
     }
+}
+
+fn get_versions(version: &str) -> (u32, u32, u32) {
+    let mut parts = version.split('.');
+    let major = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let minor = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let patch = parts.next().unwrap_or("0").parse().unwrap_or(0);
+
+    (major, minor, patch)
 }
 
 fn find_bad_values(hash_map: &HashMap<String, Vec<PackageValue>>) -> Vec<String> {
@@ -398,6 +422,46 @@ mod tests {
                 version: "1.0.0".to_string(),
                 path: "".to_string(),
             }],
+        );
+
+        assert_eq!(hash_map, result_hash_map);
+    }
+
+    #[test]
+    fn it_should_correctly_sort_versions() {
+        let json1 = r#"{
+          "dependencies": {
+            "mongoose": "^1.3.0"
+          }
+        }"#;
+        let json2 = r#"{
+          "devDependencies": {
+            "mongoose": "1.10.0"
+          }
+        }"#;
+
+        let parsed1: Value = serde_json::from_str(json1).unwrap();
+        let parsed2: Value = serde_json::from_str(json2).unwrap();
+        let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+
+        build_hash_map(parsed1, "", &mut hash_map);
+        build_hash_map(parsed2, "", &mut hash_map);
+
+        let mut result_hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+        result_hash_map.insert(
+            "mongoose".to_string(),
+            vec![
+                PackageValue {
+                    name: "mongoose".to_string(),
+                    version: "1.10.0".to_string(),
+                    path: "".to_string(),
+                },
+                PackageValue {
+                    name: "mongoose".to_string(),
+                    version: "1.3.0".to_string(),
+                    path: "".to_string(),
+                },
+            ],
         );
 
         assert_eq!(hash_map, result_hash_map);
