@@ -11,6 +11,16 @@ struct PackageValue {
     path: String,
 }
 
+impl PackageValue {
+    fn new(name: &str, version: &str, path: &str) -> Self {
+        PackageValue {
+            name: name.to_string(),
+            version: version.to_string(),
+            path: path.to_string(),
+        }
+    }
+}
+
 fn parse_file(path: &Path) -> std::io::Result<Value> {
     let res = fs::read_to_string(path)?;
     let value: Value = serde_json::from_str(&res)?;
@@ -26,55 +36,54 @@ fn build_hash_map(value: Value, path: &str, map: &mut HashMap<String, Vec<Packag
 }
 
 fn traverse_deps(deps: Option<&Value>, map: &mut HashMap<String, Vec<PackageValue>>, path: &str) {
-    if let Some(deps) = deps {
-        if let Some(deps) = deps.as_object() {
-            for (key, value) in deps {
-                if let Some(value_str) = value.as_str() {
-                    let entry = map.entry(key.to_string()).or_default();
+    deps.and_then(|d| d.as_object())
+        .into_iter()
+        .flat_map(|deps| deps.iter())
+        .filter_map(|(key, value)| Some((key, value.as_str()?)))
+        .for_each(|(key, value_str)| process_dependency(key, value_str, map, path));
+}
 
-                    let cleaned_value = value_str
-                        .chars()
-                        .filter(|c| *c == '.' || c.is_ascii_digit())
-                        .collect::<String>();
+fn process_dependency(
+    key: &str,
+    value_str: &str,
+    map: &mut HashMap<String, Vec<PackageValue>>,
+    path: &str,
+) {
+    let entry = map.entry(key.to_string()).or_default();
+    let version = clean_version(value_str);
+    let package_value = PackageValue::new(key, &version, path);
 
-                    if !entry.iter_mut().any(|v| v.version == cleaned_value) {
-                        if entry.is_empty() {
-                            entry.push(PackageValue {
-                                name: key.to_string(),
-                                version: cleaned_value.to_string(),
-                                path: path.to_string(),
-                            });
-                            continue;
-                        }
-                        let (major, minor, patch) = get_versions(&entry[0].version);
-                        let (major_new, minor_new, patch_new) = get_versions(&cleaned_value);
-
-                        let should_insert = major_new > major
-                            || (major_new == major && minor_new > minor)
-                            || (major_new == major && minor_new == minor && patch_new > patch);
-
-                        if should_insert {
-                            entry.insert(
-                                0,
-                                PackageValue {
-                                    name: key.to_string(),
-                                    version: cleaned_value.to_string(),
-                                    path: path.to_string(),
-                                },
-                            );
-                            continue;
-                        }
-
-                        entry.push(PackageValue {
-                            name: key.to_string(),
-                            version: cleaned_value.to_string(),
-                            path: path.to_string(),
-                        });
-                    }
-                }
-            }
-        }
+    if entry.iter().any(|v| v.version == version) {
+        return;
     }
+
+    let should_unshift = is_new_version_higher(&version, entry);
+
+    if should_unshift {
+        entry.insert(0, package_value);
+    } else {
+        entry.push(package_value);
+    }
+}
+
+fn clean_version(version_str: &str) -> String {
+    version_str
+        .chars()
+        .filter(|c| *c == '.' || c.is_ascii_digit())
+        .collect()
+}
+
+fn is_new_version_higher(version: &str, entry: &[PackageValue]) -> bool {
+    if entry.is_empty() {
+        return false;
+    }
+
+    let (major, minor, patch) = get_versions(&entry[0].version);
+    let (major_new, minor_new, patch_new) = get_versions(version);
+
+    major_new > major
+        || (major_new == major && minor_new > minor)
+        || (major_new == major && minor_new == minor && patch_new > patch)
 }
 
 fn get_versions(version: &str) -> (u32, u32, u32) {
@@ -153,11 +162,7 @@ mod tests {
         let mut result_hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
         result_hash_map.insert(
             "mongoose".to_string(),
-            vec![PackageValue {
-                name: "mongoose".to_string(),
-                version: "1.0.0".to_string(),
-                path: "".to_string(),
-            }],
+            vec![PackageValue::new("mongoose", "1.0.0", "")],
         );
         assert_eq!(hash_map, result_hash_map);
     }
@@ -184,16 +189,8 @@ mod tests {
         result_hash_map.insert(
             "mongoose".to_string(),
             vec![
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.0.0".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "1.0.0".to_string(),
-                    path: "".to_string(),
-                },
+                PackageValue::new("mongoose", "2.0.0", ""),
+                PackageValue::new("mongoose", "1.0.0", ""),
             ],
         );
 
@@ -206,16 +203,8 @@ mod tests {
         hash_map.insert(
             "mongoose".to_string(),
             vec![
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.0.0".to_string(),
-                    path: "path/to/mongoose".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "1.0.0".to_string(),
-                    path: "path/to/mongoose".to_string(),
-                },
+                PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
+                PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
             ],
         );
 
@@ -232,11 +221,7 @@ mod tests {
         let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
         hash_map.insert(
             "mongoose".to_string(),
-            vec![PackageValue {
-                name: "mongoose".to_string(),
-                version: "1.0.0".to_string(),
-                path: "".to_string(),
-            }],
+            vec![PackageValue::new("mongoose", "1.0.0", "")],
         );
 
         let bad_values = find_bad_values(&hash_map);
@@ -276,16 +261,8 @@ mod tests {
         result_hash_map.insert(
             "mongoose".to_string(),
             vec![
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.0.0".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "1.0.0".to_string(),
-                    path: "".to_string(),
-                },
+                PackageValue::new("mongoose", "2.0.0", ""),
+                PackageValue::new("mongoose", "1.0.0", ""),
             ],
         );
 
@@ -308,11 +285,7 @@ mod tests {
         let mut result_hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
         result_hash_map.insert(
             "mongoose".to_string(),
-            vec![PackageValue {
-                name: "mongoose".to_string(),
-                version: "1.0.0".to_string(),
-                path: path.to_string(),
-            }],
+            vec![PackageValue::new("mongoose", "1.0.0", path)],
         );
 
         assert_eq!(hash_map, result_hash_map);
@@ -363,31 +336,11 @@ mod tests {
         result_hash_map.insert(
             "mongoose".to_string(),
             vec![
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.1.1".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.1.0".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.0.0".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "1.0.0".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "2.0.1".to_string(),
-                    path: "".to_string(),
-                },
+                PackageValue::new("mongoose", "2.1.1", ""),
+                PackageValue::new("mongoose", "2.1.0", ""),
+                PackageValue::new("mongoose", "2.0.0", ""),
+                PackageValue::new("mongoose", "1.0.0", ""),
+                PackageValue::new("mongoose", "2.0.1", ""),
             ],
         );
 
@@ -417,11 +370,7 @@ mod tests {
         let mut result_hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
         result_hash_map.insert(
             "mongoose".to_string(),
-            vec![PackageValue {
-                name: "mongoose".to_string(),
-                version: "1.0.0".to_string(),
-                path: "".to_string(),
-            }],
+            vec![PackageValue::new("mongoose", "1.0.0", "")],
         );
 
         assert_eq!(hash_map, result_hash_map);
@@ -451,16 +400,8 @@ mod tests {
         result_hash_map.insert(
             "mongoose".to_string(),
             vec![
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "1.10.0".to_string(),
-                    path: "".to_string(),
-                },
-                PackageValue {
-                    name: "mongoose".to_string(),
-                    version: "1.3.0".to_string(),
-                    path: "".to_string(),
-                },
+                PackageValue::new("mongoose", "1.10.0", ""),
+                PackageValue::new("mongoose", "1.3.0", ""),
             ],
         );
 
