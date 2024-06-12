@@ -32,12 +32,12 @@ fn traverse_deps(deps: Option<&Value>, map: &mut HashMap<String, Vec<PackageValu
                 if let Some(value_str) = value.as_str() {
                     let entry = map.entry(key.to_string()).or_default();
 
-                    if !entry.iter_mut().any(|v| v.version == value_str) {
-                        let cleaned_value = value_str
-                            .chars()
-                            .filter(|c| *c == '.' || c.is_ascii_digit())
-                            .collect::<String>();
+                    let cleaned_value = value_str
+                        .chars()
+                        .filter(|c| *c == '.' || c.is_ascii_digit())
+                        .collect::<String>();
 
+                    if !entry.iter_mut().any(|v| v.version == cleaned_value) {
                         if !entry.is_empty() && entry[0].version < cleaned_value {
                             entry.insert(
                                 0,
@@ -365,6 +365,39 @@ mod tests {
                     path: "".to_string(),
                 },
             ],
+        );
+
+        assert_eq!(hash_map, result_hash_map);
+    }
+
+    #[test]
+    fn it_should_skip_same_versions() {
+        let json1 = r#"{
+          "dependencies": {
+            "mongoose": "^1.0.0"
+          }
+        }"#;
+        let json2 = r#"{
+          "devDependencies": {
+            "mongoose": "1.0.0"
+          }
+        }"#;
+
+        let parsed1: Value = serde_json::from_str(json1).unwrap();
+        let parsed2: Value = serde_json::from_str(json2).unwrap();
+        let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+
+        build_hash_map(parsed1, "", &mut hash_map);
+        build_hash_map(parsed2, "", &mut hash_map);
+
+        let mut result_hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+        result_hash_map.insert(
+            "mongoose".to_string(),
+            vec![PackageValue {
+                name: "mongoose".to_string(),
+                version: "1.0.0".to_string(),
+                path: "".to_string(),
+            }],
         );
 
         assert_eq!(hash_map, result_hash_map);
