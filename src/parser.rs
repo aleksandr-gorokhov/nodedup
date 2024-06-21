@@ -93,11 +93,15 @@ fn get_versions(version: &str) -> (u32, u32, u32) {
     (major, minor, patch)
 }
 
-fn find_bad_values(hash_map: &HashMap<String, Vec<PackageValue>>) -> Vec<String> {
+fn find_bad_values(
+    hash_map: &HashMap<String, Vec<PackageValue>>,
+    ignore: Vec<String>,
+) -> Vec<String> {
     let mut bad_values = Vec::new();
 
     for (key, values) in hash_map {
-        if values.len() > 1 {
+        let ignored = ignore.iter().any(|i| i == key);
+        if values.len() > 1 && !ignored {
             let result = format!(
                 "Package: {}. Unique versions: {}. Highest version: {}. Located: {}.",
                 key,
@@ -112,16 +116,28 @@ fn find_bad_values(hash_map: &HashMap<String, Vec<PackageValue>>) -> Vec<String>
     bad_values
 }
 
-pub fn find_duplicate_dependencies(paths: Vec<String>) -> Vec<String> {
+pub fn find_duplicate_dependencies(paths: Vec<String>, ignore_path: &str) -> Vec<String> {
+    let ignore_file = read_ignores(ignore_path);
+    let ignores = parse_ignores(&ignore_file.unwrap_or_default());
     let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
     for path in paths {
         let path_buf = Path::new(&path);
         let value = parse_file(path_buf).unwrap();
         build_hash_map(value, &path, &mut hash_map);
     }
-    let bad_values = find_bad_values(&hash_map);
+    let bad_values = find_bad_values(&hash_map, ignores);
 
     bad_values.iter().map(|s| s.to_string()).collect()
+}
+
+fn read_ignores(path: &str) -> std::io::Result<String> {
+    let file = fs::read_to_string(path)?;
+
+    Ok(file)
+}
+
+fn parse_ignores(ignores: &str) -> Vec<String> {
+    ignores.lines().map(|s| s.trim().to_string()).collect()
 }
 
 #[cfg(test)]
@@ -142,6 +158,15 @@ mod tests {
           }
         }"#;
         let expected: Value = serde_json::from_str(expected).unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_read_ignore_file() {
+        let actual = read_ignores("./src/data/.ndignore").unwrap();
+
+        let expected = "testignore\ntestignore2\ntestignore3";
 
         assert_eq!(actual, expected);
     }
@@ -206,12 +231,29 @@ mod tests {
             ],
         );
 
-        let bad_values = find_bad_values(&hash_map);
+        let bad_values = find_bad_values(&hash_map, vec![]);
 
         assert_eq!(
             bad_values,
             vec!["Package: mongoose. Unique versions: 2. Highest version: 2.0.0. Located: path/to/mongoose."]
         );
+    }
+
+    #[test]
+    fn it_should_ignore() {
+        let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+        hash_map.insert(
+            "mongoose".to_string(),
+            vec![
+                PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
+                PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
+            ],
+        );
+
+        let bad_values = find_bad_values(&hash_map, vec!["mongoose".to_string()]);
+
+        let empty_vec: Vec<String> = Vec::new();
+        assert_eq!(bad_values, empty_vec);
     }
 
     #[test]
@@ -222,7 +264,7 @@ mod tests {
             vec![PackageValue::new("mongoose", "1.0.0", "")],
         );
 
-        let bad_values = find_bad_values(&hash_map);
+        let bad_values = find_bad_values(&hash_map, vec![]);
 
         let empty_vec: Vec<String> = Vec::new();
         assert_eq!(bad_values, empty_vec);
@@ -231,7 +273,7 @@ mod tests {
     #[test]
     fn it_should_call_all_together() {
         let path = "./src/data/package.json".to_string();
-        let result = find_duplicate_dependencies(vec![path]);
+        let result = find_duplicate_dependencies(vec![path], "");
 
         let empty_vec: Vec<String> = Vec::new();
         assert_eq!(result, empty_vec);
@@ -404,5 +446,17 @@ mod tests {
         );
 
         assert_eq!(hash_map, result_hash_map);
+    }
+
+    #[test]
+    fn it_should_parse_ignore() {
+        let parsed = parse_ignores("mongoose\nexpress\n");
+        assert_eq!(parsed, vec!["mongoose", "express"]);
+    }
+
+    #[test]
+    fn it_should_return_empty_ignore() {
+        let parsed = parse_ignores("");
+        assert!(parsed.is_empty());
     }
 }
