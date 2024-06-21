@@ -3,7 +3,6 @@ use clap::Parser;
 mod lookup;
 mod parser;
 
-/// Find duplicate JS dependencies
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -12,7 +11,7 @@ struct Args {
     folder: String,
 
     /// Exit with zero code when duplicates are found
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long)]
     silent: bool,
 }
 
