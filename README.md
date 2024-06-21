@@ -17,6 +17,6 @@ Usage: nodedup [OPTIONS] --folder <FOLDER>
 
 Options:
   -f, --folder <FOLDER>  Folder to scan
-  -s, --silent           Emit errors when duplicates are found
+  -s, --silent           Exit with zero code when duplicates are found
   -h, --help             Print help
   -V, --version          Print version
