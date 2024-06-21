@@ -1,18 +1,33 @@
-use std::env;
+use clap::Parser;
 
 mod lookup;
 mod parser;
 
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Folder to scan
+    #[arg(short, long)]
+    folder: String,
+
+    /// Emit errors when duplicates are found
+    #[arg(short, long, default_value_t = false)]
+    silent: bool,
+}
+
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <path>", args[0]);
-        std::process::exit(1);
-    }
-    let path = &args[1];
-    let ignore = lookup::get_ignore_file(path);
-    let files = lookup::get_package_json_files(path);
+    let args = Args::parse();
+
+    let folder = args.folder;
+    let ignore = lookup::get_ignore_file(&folder);
+    let files = lookup::get_package_json_files(&folder);
     let duplicates = parser::find_duplicate_dependencies(files, &ignore.unwrap_or_default());
     println!("Duplicates: {:#?}", duplicates);
     println!("Total duplicates: {}", duplicates.len());
+
+    if args.silent {
+        std::process::exit(0);
+    }
+    std::process::exit(duplicates.len() as i32);
 }
