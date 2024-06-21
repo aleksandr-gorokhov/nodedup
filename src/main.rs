@@ -3,7 +3,7 @@ use clap::Parser;
 mod lookup;
 mod parser;
 
-/// Simple program to greet a person
+/// Find duplicate JS dependencies
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -11,7 +11,7 @@ struct Args {
     #[arg(short, long)]
     folder: String,
 
-    /// Emit errors when duplicates are found
+    /// Exit with zero code when duplicates are found
     #[arg(short, long, default_value_t = false)]
     silent: bool,
 }
