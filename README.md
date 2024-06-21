@@ -1,6 +1,6 @@
 # NoDEdup: Duplicate Package Finder
 
-NodeDup is a CLI tool designed to help you identify duplicate JavaScript dependencies in your project. It scans all
+NoDEdup is a CLI tool designed to help you identify duplicate JavaScript dependencies in your project. It scans all
 package.json files within the specified folder, pinpointing any dependencies or devDependencies that exist in multiple
 versions, helping you streamline your project's dependency tree.
 
