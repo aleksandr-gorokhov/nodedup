@@ -20,3 +20,18 @@ Options:
   -s, --silent           Exit with zero code when duplicates are found
   -h, --help             Print help
   -V, --version          Print version
+```
+
+# Ignore dependencies
+
+You can create `.ndignore` file in the root of your project to ignore specific dependencies. Each line in the file
+should
+be a dependency name.
+Ignoring dependencies is useful when you have a dependency that you know is duplicated but you don't want to remove it.
+
+## Sample .ndignore file
+
+```
+lodash
+react
+```
