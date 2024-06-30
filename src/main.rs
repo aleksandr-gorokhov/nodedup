@@ -1,5 +1,8 @@
 use clap::Parser;
 
+use crate::formatter::DependenciesFormatter;
+
+mod formatter;
 mod lookup;
 mod parser;
 
@@ -13,6 +16,10 @@ struct Args {
     /// Exit with zero code when duplicates are found
     #[arg(short, long)]
     silent: bool,
+
+    /// Output format. Possible values: 'default', 'short', 'full'
+    #[arg(short, long, default_value = "default")]
+    output: String,
 }
 
 fn main() {
@@ -22,11 +29,14 @@ fn main() {
     let ignore = lookup::get_ignore_file(&folder);
     let files = lookup::get_package_json_files(&folder);
     let duplicates = parser::find_duplicate_dependencies(files, &ignore.unwrap_or_default());
-    println!("Duplicates: {:#?}", duplicates);
-    println!("Total duplicates: {}", duplicates.len());
+    let errors = duplicates.len() as i32;
+    let mut formatter = DependenciesFormatter::new(duplicates);
+    formatter.try_set_style(&args.output);
+    let result = formatter.format();
+    println!("{}", result);
 
     if args.silent {
         std::process::exit(0);
     }
-    std::process::exit(duplicates.len() as i32);
+    std::process::exit(errors);
 }

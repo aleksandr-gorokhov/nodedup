@@ -3,14 +3,14 @@ use std::{collections::HashMap, fs, path::Path};
 use serde_json::Value;
 
 #[derive(Debug, PartialEq, Clone)]
-struct PackageValue {
-    name: String,
-    version: String,
-    path: String,
+pub struct PackageValue {
+    pub name: String,
+    pub version: String,
+    pub path: String,
 }
 
 impl PackageValue {
-    fn new(name: &str, version: &str, path: &str) -> Self {
+    pub fn new(name: &str, version: &str, path: &str) -> Self {
         PackageValue {
             name: name.to_string(),
             version: version.to_string(),
@@ -93,30 +93,10 @@ fn get_versions(version: &str) -> (u32, u32, u32) {
     (major, minor, patch)
 }
 
-fn find_bad_values(
-    hash_map: &HashMap<String, Vec<PackageValue>>,
-    ignore: Vec<String>,
-) -> Vec<String> {
-    let mut bad_values = Vec::new();
-
-    for (key, values) in hash_map {
-        let ignored = ignore.iter().any(|i| i == key);
-        if values.len() > 1 && !ignored {
-            let result = format!(
-                "Package: {}. Unique versions: {}. Highest version: {}. Located: {}.",
-                key,
-                values.len(),
-                values[0].version,
-                values[0].path,
-            );
-            bad_values.push(result);
-        }
-    }
-
-    bad_values
-}
-
-pub fn find_duplicate_dependencies(paths: Vec<String>, ignore_path: &str) -> Vec<String> {
+pub fn find_duplicate_dependencies(
+    paths: Vec<String>,
+    ignore_path: &str,
+) -> HashMap<String, Vec<PackageValue>> {
     let ignore_file = read_ignores(ignore_path);
     let ignores = parse_ignores(&ignore_file.unwrap_or_default());
     let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
@@ -125,9 +105,27 @@ pub fn find_duplicate_dependencies(paths: Vec<String>, ignore_path: &str) -> Vec
         let value = parse_file(path_buf).unwrap();
         build_hash_map(value, &path, &mut hash_map);
     }
-    let bad_values = find_bad_values(&hash_map, ignores);
+    keep_bad_values(&mut hash_map, ignores);
 
-    bad_values.iter().map(|s| s.to_string()).collect()
+    hash_map
+}
+
+fn keep_bad_values(hash_map: &mut HashMap<String, Vec<PackageValue>>, ignores: Vec<String>) {
+    let keys_to_remove: Vec<String> = hash_map
+        .iter()
+        .filter_map(|(key, values)| {
+            let ignored = ignores.iter().any(|i| i == key);
+            if values.len() > 1 && !ignored {
+                None
+            } else {
+                Some(key.clone())
+            }
+        })
+        .collect();
+
+    for key in keys_to_remove {
+        hash_map.remove(&key);
+    }
 }
 
 fn read_ignores(path: &str) -> std::io::Result<String> {
@@ -221,62 +219,11 @@ mod tests {
     }
 
     #[test]
-    fn it_should_find_bad_values() {
-        let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
-        hash_map.insert(
-            "mongoose".to_string(),
-            vec![
-                PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
-                PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
-            ],
-        );
-
-        let bad_values = find_bad_values(&hash_map, vec![]);
-
-        assert_eq!(
-            bad_values,
-            vec!["Package: mongoose. Unique versions: 2. Highest version: 2.0.0. Located: path/to/mongoose."]
-        );
-    }
-
-    #[test]
-    fn it_should_ignore() {
-        let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
-        hash_map.insert(
-            "mongoose".to_string(),
-            vec![
-                PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
-                PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
-            ],
-        );
-
-        let bad_values = find_bad_values(&hash_map, vec!["mongoose".to_string()]);
-
-        let empty_vec: Vec<String> = Vec::new();
-        assert_eq!(bad_values, empty_vec);
-    }
-
-    #[test]
-    fn it_should_return_empty_vec_for_good_values() {
-        let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
-        hash_map.insert(
-            "mongoose".to_string(),
-            vec![PackageValue::new("mongoose", "1.0.0", "")],
-        );
-
-        let bad_values = find_bad_values(&hash_map, vec![]);
-
-        let empty_vec: Vec<String> = Vec::new();
-        assert_eq!(bad_values, empty_vec);
-    }
-
-    #[test]
     fn it_should_call_all_together() {
         let path = "./src/data/package.json".to_string();
         let result = find_duplicate_dependencies(vec![path], "");
 
-        let empty_vec: Vec<String> = Vec::new();
-        assert_eq!(result, empty_vec);
+        assert_eq!(result, HashMap::new());
     }
 
     #[test]
@@ -458,5 +405,88 @@ mod tests {
     fn it_should_return_empty_ignore() {
         let parsed = parse_ignores("");
         assert!(parsed.is_empty());
+    }
+
+    mod keep_bad_values {
+        use super::*;
+
+        #[test]
+        fn it_should_remove_valid_deps() {
+            let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+            hash_map.insert(
+                "mongoose".to_string(),
+                vec![
+                    PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
+                    PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
+                ],
+            );
+            hash_map.insert(
+                "test".to_string(),
+                vec![PackageValue::new("test", "2.0.0", "path/to/mongoose")],
+            );
+
+            let mut result_hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+            result_hash_map.insert(
+                "mongoose".to_string(),
+                vec![
+                    PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
+                    PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
+                ],
+            );
+
+            keep_bad_values(&mut hash_map, vec![]);
+
+            assert_eq!(hash_map, result_hash_map);
+        }
+
+        #[test]
+        fn it_should_ignore() {
+            let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+            hash_map.insert(
+                "mongoose".to_string(),
+                vec![
+                    PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
+                    PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
+                ],
+            );
+
+            keep_bad_values(&mut hash_map, vec!["mongoose".to_string()]);
+
+            assert_eq!(hash_map, HashMap::new());
+        }
+
+        #[test]
+        fn it_should_ignore_more_than_one_value() {
+            let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+            hash_map.insert(
+                "mongoose".to_string(),
+                vec![
+                    PackageValue::new("mongoose", "2.0.0", "path/to/mongoose"),
+                    PackageValue::new("mongoose1", "2.0.0", "path/to/mongoose"),
+                    PackageValue::new("mongoose1", "1.0.0", "path/to/mongoose"),
+                    PackageValue::new("mongoose", "1.0.0", "path/to/mongoose"),
+                ],
+            );
+
+            keep_bad_values(
+                &mut hash_map,
+                vec!["mongoose".to_string(), "mongoose1".to_string()],
+            );
+
+            assert_eq!(hash_map, HashMap::new());
+        }
+
+        #[test]
+        fn it_should_return_empty_vec_for_good_values() {
+            let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+            hash_map.insert(
+                "mongoose".to_string(),
+                vec![PackageValue::new("mongoose", "1.0.0", "")],
+            );
+
+            keep_bad_values(&mut hash_map, vec![]);
+
+            assert_eq!(hash_map, HashMap::new());
+        }
     }
 }

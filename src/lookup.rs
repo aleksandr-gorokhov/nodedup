@@ -61,13 +61,13 @@ mod tests {
     #[should_panic]
     #[test]
     fn it_should_panic_for_empty_path() {
-        let files = get_package_json_files("");
+        get_package_json_files("");
     }
 
     #[should_panic]
     #[test]
     fn it_should_panic() {
-        let files = get_package_json_files("./.../..");
+        get_package_json_files("./.../..");
     }
 
     #[test]

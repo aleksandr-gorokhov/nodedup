@@ -18,6 +18,7 @@ Usage: nodedup [OPTIONS] --folder <FOLDER>
 Options:
   -f, --folder <FOLDER>  Folder to scan
   -s, --silent           Exit with zero code when duplicates are found
+  -o, --output <OUTPUT>  Output format. Possible values: 'default', 'short', 'full' [default: default]
   -h, --help             Print help
   -V, --version          Print version
 ```
