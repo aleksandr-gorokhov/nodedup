@@ -49,7 +49,7 @@ impl DependenciesFormatter<Ready> {
         self.style = style
     }
 
-    pub fn format(&self) -> String {
+    pub fn format(&self, color: bool) -> String {
         let mut formatted = String::new();
 
         for (name, values) in &self.dependencies {
@@ -84,7 +84,14 @@ impl DependenciesFormatter<Ready> {
             ));
         }
 
-        formatted
+        if color {
+            formatted
+        } else {
+            regex::Regex::new("\x1B\\[[0-9;]*m")
+                .unwrap()
+                .replace_all(&formatted, "")
+                .to_string()
+        }
     }
 }
 
@@ -129,10 +136,13 @@ mod test {
             let mut formatter = DependenciesFormatter::new(hash_map);
             formatter.set_style(FormatStyles::Full);
 
-            let formatted = formatter.format();
+            let formatted = formatter.format(false);
             assert_eq!(
-                formatted,
-                "\u{1b}[31mtest\u{1b}[0m, Unique versions: \u{1b}[31m2\u{1b}[0m\n\u{1b}[32mLocations:\n\u{1b}[0m./src/1\n./src/2\n\n\u{1b}[32mVersions:\n\u{1b}[0m1.0.0\n2.0.0\n\n"
+                regex::Regex::new("\x1B\\[[0-9;]*m")
+                    .unwrap()
+                    .replace_all(&formatted, "")
+                    .to_string(),
+                "test, Unique versions: 2\nLocations:\n./src/1\n./src/2\n\nVersions:\n1.0.0\n2.0.0\n\n"
             );
         }
 
@@ -150,10 +160,13 @@ mod test {
             let mut formatter = DependenciesFormatter::new(hash_map);
             formatter.set_style(FormatStyles::Short);
 
-            let formatted = formatter.format();
+            let formatted = formatter.format(false);
             assert_eq!(
-                formatted,
-                "\u{1b}[31mtest\u{1b}[0m, Unique versions: \u{1b}[31m2\u{1b}[0m\n"
+                regex::Regex::new("\x1B\\[[0-9;]*m")
+                    .unwrap()
+                    .replace_all(&formatted, "")
+                    .to_string(),
+                "test, Unique versions: 2\n"
             );
         }
 
@@ -170,11 +183,58 @@ mod test {
 
             let formatter = DependenciesFormatter::new(hash_map);
 
-            let formatted = formatter.format();
+            let formatted = formatter.format(false);
             assert_eq!(
-                formatted,
-                "\u{1b}[31mtest\u{1b}[0m, Unique versions: \u{1b}[31m2\u{1b}[0m\n\u{1b}[32mLocations:\n\u{1b}[0m./src/1\n./src/2\n\n"
+                regex::Regex::new("\x1B\\[[0-9;]*m")
+                    .unwrap()
+                    .replace_all(&formatted, "")
+                    .to_string(),
+                "test, Unique versions: 2\nLocations:\n./src/1\n./src/2\n\n"
             );
+        }
+
+        mod color {
+            use super::*;
+
+            #[test]
+            fn it_should_keep_color() {
+                let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+                hash_map.insert(
+                    "test".to_string(),
+                    vec![
+                        PackageValue::new("test", "1.0.0", "./src/1"),
+                        PackageValue::new("test", "2.0.0", "./src/2"),
+                    ],
+                );
+
+                let formatter = DependenciesFormatter::new(hash_map);
+
+                let formatted = formatter.format(true);
+                assert_ne!(
+                    formatted,
+                    "test, Unique versions: 2\nLocations:\n./src/1\n./src/2\n\n"
+                );
+            }
+
+            #[test]
+            fn it_should_remove_color() {
+                let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
+                hash_map.insert(
+                    "test".to_string(),
+                    vec![
+                        PackageValue::new("test", "1.0.0", "./src/1"),
+                        PackageValue::new("test", "2.0.0", "./src/2"),
+                    ],
+                );
+
+                let formatter = DependenciesFormatter::new(hash_map);
+
+                let formatted = formatter.format(false);
+                assert_eq!(
+                    formatted,
+                    "test, Unique versions: 2\nLocations:\n./src/1\n./src/2\n\n"
+                );
+            }
         }
     }
 }

@@ -13,13 +13,17 @@ struct Args {
     #[arg(short, long)]
     folder: String,
 
+    /// Output format. Possible values: 'default', 'short', 'full'
+    #[arg(short, long, default_value = "default")]
+    output: String,
+
     /// Exit with zero code when duplicates are found
     #[arg(short, long)]
     silent: bool,
 
-    /// Output format. Possible values: 'default', 'short', 'full'
-    #[arg(short, long, default_value = "default")]
-    output: String,
+    /// Color important output
+    #[arg(short, long)]
+    color: bool,
 }
 
 fn main() {
@@ -32,7 +36,7 @@ fn main() {
     let errors = duplicates.len() as i32;
     let mut formatter = DependenciesFormatter::new(duplicates);
     formatter.try_set_style(&args.output);
-    let result = formatter.format();
+    let result = formatter.format(args.color);
     println!("{}", result);
 
     if args.silent {
