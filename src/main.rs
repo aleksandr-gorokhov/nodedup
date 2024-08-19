@@ -1,6 +1,7 @@
 use clap::Parser;
 
 use crate::formatter::DependenciesFormatter;
+use crate::parser::get_ignore_values;
 
 mod formatter;
 mod lookup;
@@ -31,8 +32,10 @@ fn main() {
 
     let folder = args.folder;
     let ignore = lookup::get_ignore_file(&folder);
-    let files = lookup::get_package_json_files(&folder);
-    let duplicates = parser::find_duplicate_dependencies(files, &ignore.unwrap_or_default());
+    let ignore = ignore.unwrap_or_default();
+    let ignores = get_ignore_values(&ignore);
+    let files = lookup::get_package_json_files(&folder, &ignores);
+    let duplicates = parser::find_duplicate_dependencies(files, &ignores);
     let errors = duplicates.len() as i32;
     let mut formatter = DependenciesFormatter::new(duplicates);
     formatter.try_set_style(&args.output);

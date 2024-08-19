@@ -95,10 +95,8 @@ fn get_versions(version: &str) -> (u32, u32, u32) {
 
 pub fn find_duplicate_dependencies(
     paths: Vec<String>,
-    ignore_path: &str,
+    ignores: &[String],
 ) -> HashMap<String, Vec<PackageValue>> {
-    let ignore_file = read_ignores(ignore_path);
-    let ignores = parse_ignores(&ignore_file.unwrap_or_default());
     let mut hash_map: HashMap<String, Vec<PackageValue>> = HashMap::new();
     for path in paths {
         let path_buf = Path::new(&path);
@@ -110,7 +108,7 @@ pub fn find_duplicate_dependencies(
     hash_map
 }
 
-fn keep_bad_values(hash_map: &mut HashMap<String, Vec<PackageValue>>, ignores: Vec<String>) {
+fn keep_bad_values(hash_map: &mut HashMap<String, Vec<PackageValue>>, ignores: &[String]) {
     let keys_to_remove: Vec<String> = hash_map
         .iter()
         .filter_map(|(key, values)| {
@@ -136,6 +134,11 @@ fn read_ignores(path: &str) -> std::io::Result<String> {
 
 fn parse_ignores(ignores: &str) -> Vec<String> {
     ignores.lines().map(|s| s.trim().to_string()).collect()
+}
+
+pub fn get_ignore_values(path: &str) -> Vec<String> {
+    let ignore_file = read_ignores(path).unwrap_or_default();
+    parse_ignores(&ignore_file)
 }
 
 #[cfg(test)]
@@ -221,7 +224,7 @@ mod tests {
     #[test]
     fn it_should_call_all_together() {
         let path = "./src/data/package.json".to_string();
-        let result = find_duplicate_dependencies(vec![path], "");
+        let result = find_duplicate_dependencies(vec![path], &[]);
 
         assert_eq!(result, HashMap::new());
     }
@@ -434,7 +437,7 @@ mod tests {
                 ],
             );
 
-            keep_bad_values(&mut hash_map, vec![]);
+            keep_bad_values(&mut hash_map, &[]);
 
             assert_eq!(hash_map, result_hash_map);
         }
@@ -450,7 +453,7 @@ mod tests {
                 ],
             );
 
-            keep_bad_values(&mut hash_map, vec!["mongoose".to_string()]);
+            keep_bad_values(&mut hash_map, &["mongoose".to_string()]);
 
             assert_eq!(hash_map, HashMap::new());
         }
@@ -470,7 +473,7 @@ mod tests {
 
             keep_bad_values(
                 &mut hash_map,
-                vec!["mongoose".to_string(), "mongoose1".to_string()],
+                &["mongoose".to_string(), "mongoose1".to_string()],
             );
 
             assert_eq!(hash_map, HashMap::new());
@@ -484,7 +487,7 @@ mod tests {
                 vec![PackageValue::new("mongoose", "1.0.0", "")],
             );
 
-            keep_bad_values(&mut hash_map, vec![]);
+            keep_bad_values(&mut hash_map, &[]);
 
             assert_eq!(hash_map, HashMap::new());
         }
